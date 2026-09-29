@@ -22,15 +22,6 @@ CETV-2
 CETV-3
 CETV-4
 
-🌐央视外语,#genre#
-CGTN
-CGTN纪录
-CGTN英语
-CGTN法语
-CGTN俄语
-CGTN西语
-CGTN阿语
-
 💰央视付费,#genre#
 CCTV风云音乐
 CCTV老故事
@@ -105,7 +96,6 @@ CCTV4K真4K
 ☘️湖南频道,#genre#
 湖南经视
 湖南都市
-湖南公共
 湖南娱乐
 湖南电视剧
 湖南电影
@@ -115,7 +105,6 @@ CCTV4K真4K
 金鹰纪实
 金鹰卡通
 长沙新闻综合
-长沙新闻
 
 🏀体育频道,#genre#
 五星体育
