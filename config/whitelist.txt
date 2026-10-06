@@ -192,23 +192,23 @@ ViuTVsix,http://bziyunshao.synology.me:8889/bysid/96
 美亚电影台,http://103.172.187.30:12000/stream/mytv/null-2/master.m3u8
 
 # —— 🎬 电影轮播 ——
+陈翔六点半,https://live.ottiptv.cc/huya/11274154
 周星驰电影,https://live.ottiptv.cc/huya/11342412
 林正英电影,https://live.ottiptv.cc/huya/11342421
 沈腾电影,https://live.ottiptv.cc/huya/11601968
-贺岁电影,https://live.ottiptv.cc/huya/11601986
-笑傲江湖,https://live.ottiptv.cc/huya/23865142
-倚天屠龙记,https://live.ottiptv.cc/huya/11342403
-经典电影,https://live.ottiptv.cc/huya/11342415
 成龙电影,https://live.ottiptv.cc/huya/23829474
 李连杰电影,https://live.ottiptv.cc/huya/23903106
 刘德华电影,https://live.ottiptv.cc/huya/31107167
+经典电影,https://live.ottiptv.cc/huya/11342415
+贺岁电影,https://live.ottiptv.cc/huya/11601986
 武侠电影,https://live.ottiptv.cc/huya/11352874
-枪战电影,https://live.ottiptv.cc/huya/11352934
-功夫电影,https://live.ottiptv.cc/huya/11352941
-神雕侠侣,https://live.ottiptv.cc/huya/11342419
+枪战电影,https://live.ottiptv.cc/huya/30373013
+神雕侠侣,https://live.ottiptv.cc/huya/396738
+笑傲江湖,https://live.ottiptv.cc/huya/26355858
+倚天屠龙记,https://live.ottiptv.cc/huya/21674665
 天龙八部,https://live.ottiptv.cc/huya/11342420
-少年包青天第一部,https://live.ottiptv.cc/huya/11342422
-开心麻花,https://live.ottiptv.cc/huya/11601970
+神探狄仁杰,https://live.ottiptv.cc/huya/30986994
+喜剧片,https://live.ottiptv.cc/huya/31106626
 
 
 [KEYWORDS]
