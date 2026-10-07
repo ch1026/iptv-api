@@ -1,3 +1,21 @@
 # 这是EPG订阅列表，用于生成M3U结果频道菜单信息
 # This is the EPG subscription list used to generate M3U result channel menu information
-http://e.erw.cc/e.xml.gz
+# http://e.erw.cc/e.xml.gz
+
+① 主源：CharmingEPG —— 单源覆盖最高，央视 + 全国卫视 + 湖南台 + 港澳台齐全
+https://epg.cdn.loc.cc/xml
+
+② 主源热备：erw 数据（Gitee 国内站，与 ① 的内地节目同源、换主机，防单点故障）
+https://gitee.com/taksssss/tv/raw/main/epg/erw.xml.gz
+
+③ 补充：epg.pw 中国区（Gitee 镜像）—— 补少数 ①② 没有的频道
+https://gitee.com/taksssss/tv/raw/main/epg/epgpw_cn.xml.gz
+
+④ 兜底：112114 本尊 —— 公认覆盖最全。内地移动宽带有 DNS 污染打不开，
+但我们是在境外 CI 上拉，不受影响。哪天拉不动就在行首加 # 停用。
+http://epg.112114.xyz/pp.xml
+
+⑤ 可选：51zmt 镜像 —— 今明两天节目更准，需要时取消注释
+https://gitee.com/taksssss/tv/raw/main/epg/51zmte1.xml.gz
+⑥ 可选：港澳台专用（明珠台 / TVB Plus / 无线新闻台 / ViuTV）—— ① 已含大部分
+https://gitee.com/taksssss/tv/raw/main/epg/epgpw_hk.xml.gz
