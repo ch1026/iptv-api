@@ -98,18 +98,48 @@ jobs:
           echo "pages_base_url=$pages_base_url" >> "$GITHUB_OUTPUT"
           IPTV_API_ARTIFACT_BASE_URL="$pages_base_url" pipenv run dev
 
-      - name: Sanitize playlist and align EPG
+      - name: Sanitize playlist and normalize EPG
         run: |
           python - <<'SANEOF'
           import os
           import re
           import gzip
+          import bisect
           import xml.etree.ElementTree as ET
+          from datetime import datetime
 
           URL_HEAD = re.compile(r'^https?://', re.I)
           URL_FULL = re.compile(r'^https?://\S{4,}$', re.I)
           CH_NAME = re.compile(r'tvg-name="([^"]*)"')
+          TIME14 = re.compile(r'(\d{14})')
           BAD_TITLE = ('未能提供', '敬请原谅')
+
+          # 整条标题就是这个 -> 信息量为 0
+          PURE_GENERIC = {
+              '电视剧', '剧场', '电影', '生活服务', '精彩呈现', '栏目', '专题', '节目',
+              '暂无', '敬请', '其他', '广告', '节目预告', '连续剧', '动画片', '综艺',
+              '宣传', '导视', '垫片', '片花', '电视剧场', '精彩节目', '微短剧',
+              '中国故事', '纪录片', '未提供', '节目单', '待定', '敬请期待', '敬请收看',
+          }
+          PREFIX_GENERIC = ('电视剧', '剧场', '电影', '动画片', '栏目', '专题',
+                            '重播', '栏目剧', '宣传片', '导视')
+
+
+          def title_rank(text):
+              """2=具体节目名  1=泛词打头但后面有内容  0=纯泛词或空"""
+              t = (text or '').strip()
+              if not t:
+                  return 0
+              if t in PURE_GENERIC:
+                  return 0
+              if any(t.startswith(p) for p in PREFIX_GENERIC):
+                  return 1
+              return 2
+
+
+          def parse_time(raw):
+              m = TIME14.match(raw or '')
+              return datetime.strptime(m.group(1), '%Y%m%d%H%M%S') if m else None
 
 
           def clean_url(raw):
@@ -247,6 +277,118 @@ jobs:
                     % (ph, ch_del, pr_del, len(root.findall('channel'))))
 
 
+          def measure(rows):
+              """返回 (具体标题条数, 纯泛词条数, 时间线空洞秒)"""
+              bych = {}
+              for s, e, text, prog in rows:
+                  bych.setdefault(prog.get('channel'), []).append((s, e, title_rank(text)))
+              detail = generic = 0
+              gap = 0.0
+              for lst in bych.values():
+                  lst.sort()
+                  cur = None
+                  for s, e, r in lst:
+                      if r == 2:
+                          detail += 1
+                      elif r == 0:
+                          generic += 1
+                      if cur is None:
+                          cur = e
+                      elif s > cur:
+                          gap += (s - cur).total_seconds()
+                          cur = e
+                      elif e > cur:
+                          cur = e
+              return detail, generic, gap
+
+
+          def dedupe_epg(path):
+              """同一频道只保留一条互不重叠的时间线。
+
+              iptv-api 的节目单合并键是 (start, stop) 精确到秒，几个源只要
+              起止时间差一分钟就会各留一套时间线叠在一起。播放器读到哪条算哪条，
+              于是同一时段既可能出现"星月征途 第12集"，也可能出现"电视剧"。
+
+              这里按频道整体重排（不按天切分，跨零点也不会断开），
+              用加权区间调度求最优解，目标优先级：
+                ① 具体标题覆盖时长最大（泛词不许盖住同时间的具体节目名）
+                ② 总覆盖时长最大（尽量不留空洞）
+                ③ 标题信息量之和最大
+              """
+              tree = ET.parse(path)
+              root = tree.getroot()
+
+              buckets = {}
+              for prog in list(root.findall('programme')):
+                  s = parse_time(prog.get('start'))
+                  e = parse_time(prog.get('stop'))
+                  t = prog.find('title')
+                  text = (t.text or '') if t is not None else ''
+                  if s is None or e is None or e <= s:
+                      root.remove(prog)
+                      continue
+                  buckets.setdefault(prog.get('channel'), []).append((s, e, text, prog))
+
+              all_rows = [x for v in buckets.values() for x in v]
+              before = len(all_rows)
+              if not before:
+                  print('EPG dedup: no programme found, skipped')
+                  return
+
+              kept = []
+              for items in buckets.values():
+                  v = sorted(items, key=lambda x: (x[1], x[0]))
+                  ends = [x[1] for x in v]
+                  n = len(v)
+                  prev = [bisect.bisect_right(ends, v[i][0]) - 1 for i in range(n)]
+                  best = [(0, 0, 0)] * (n + 1)
+                  take = [False] * (n + 1)
+                  for i in range(1, n + 1):
+                      s, e, text, _ = v[i - 1]
+                      dur = int((e - s).total_seconds())
+                      r = title_rank(text)
+                      base = best[prev[i - 1] + 1]
+                      cand = (base[0] + (dur if r == 2 else 0),
+                              base[1] + dur,
+                              base[2] + r)
+                      if cand > best[i - 1]:
+                          best[i] = cand
+                          take[i] = True
+                      else:
+                          best[i] = best[i - 1]
+                  i = n
+                  while i > 0:
+                      if take[i]:
+                          kept.append(v[i - 1])
+                          i = prev[i - 1] + 1
+                      else:
+                          i -= 1
+
+              kept.sort(key=lambda x: (x[3].get('channel'), x[0]))
+              for prog in list(root.findall('programme')):
+                  root.remove(prog)
+              for row in kept:
+                  root.append(row[3])
+
+              det_b, gen_b, _ = measure(all_rows)
+              det_a, gen_a, gap_a = measure(kept)
+              after = len(kept)
+
+              ET.indent(tree, space='\t')
+              tree.write(path, encoding='utf-8', xml_declaration=True)
+              for gz in (os.path.join(os.path.dirname(path), 'epg.gz'), path + '.gz'):
+                  if os.path.exists(gz):
+                      with open(path, 'rb') as fin, gzip.open(gz, 'wb') as fout:
+                          fout.write(fin.read())
+
+              print('EPG dedup: programmes %d -> %d (-%.0f%%) | '
+                    '具体标题占比 %.1f%% -> %.1f%% | 纯泛词 %d -> %d 条 | '
+                    '时间线空洞 %.1fh'
+                    % (before, after, 100.0 * (before - after) / before,
+                       100.0 * det_b / before, 100.0 * det_a / after,
+                       gen_b, gen_a, gap_a / 3600))
+
+
           names = set()
 
           m3u_path = 'output/result.m3u'
@@ -268,6 +410,7 @@ jobs:
           for epg_path in ('output/epg/epg.xml', 'output/epg.xml'):
               if os.path.exists(epg_path):
                   align_epg(epg_path, names)
+                  dedupe_epg(epg_path)
           print('Keep %d channel names in total' % len(names))
           SANEOF
 
