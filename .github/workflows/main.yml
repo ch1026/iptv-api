@@ -98,40 +98,178 @@ jobs:
           echo "pages_base_url=$pages_base_url" >> "$GITHUB_OUTPUT"
           IPTV_API_ARTIFACT_BASE_URL="$pages_base_url" pipenv run dev
 
-      - name: Strip placeholder programmes from EPG
+      - name: Sanitize playlist and align EPG
         run: |
-          python - <<'EPGEOF'
-          import gzip
+          python - <<'SANEOF'
           import os
+          import re
+          import gzip
           import xml.etree.ElementTree as ET
 
-          xml_path = 'output/epg/epg.xml'
-          gz_path = 'output/epg/epg.gz'
-          if not os.path.exists(xml_path):
-              print('EPG xml not found, skip cleaning')
+          URL_HEAD = re.compile(r'^https?://', re.I)
+          URL_FULL = re.compile(r'^https?://\S{4,}$', re.I)
+          CH_NAME = re.compile(r'tvg-name="([^"]*)"')
+          BAD_TITLE = ('未能提供', '敬请原谅')
+
+
+          def clean_url(raw):
+              """只接受真正的 http(s) 网址；自动砍掉网址后面的说明文字与注释"""
+              s = (raw or '').strip()
+              if not s:
+                  return None
+              s = re.split(r'\s+', s)[0]
+              if not URL_HEAD.match(s):
+                  return None
+              if '#' in s:
+                  s = s.split('#')[0]
+              if not URL_FULL.match(s):
+                  return None
+              return s
+
+
+          def sanitize_m3u(path):
+              """删除非法 url；整条没有有效 url 的条目一并删除"""
+              lines = open(path, encoding='utf-8', errors='replace').read().splitlines()
+              head, items, cur = [], [], None
+              for ln in lines:
+                  s = ln.strip()
+                  if not s:
+                      continue
+                  if s.upper().startswith('#EXTM3U'):
+                      head.append(s)
+                      continue
+                  if s.startswith('#EXTINF'):
+                      if cur is not None:
+                          items.append(cur)
+                      cur = [s]
+                      continue
+                  if cur is None:
+                      continue
+                  if s.startswith('#'):
+                      cur.append(s)
+                  else:
+                      u = clean_url(s)
+                      if u:
+                          cur.append(u)
+              if cur is not None:
+                  items.append(cur)
+
+              kept, names = [], set()
+              for it in items:
+                  if any(not l.startswith('#') for l in it[1:]):
+                      kept.append(it)
+                      m = CH_NAME.search(it[0])
+                      if m and m.group(1).strip():
+                          names.add(m.group(1).strip())
+
+              if items and not kept:
+                  print('WARNING: m3u cleanup would empty the file, skipped')
+                  return len(items), len(items), names
+
+              out = head[:]
+              for it in kept:
+                  out.extend(it)
+              open(path, 'w', encoding='utf-8', newline='\n').write('\n'.join(out) + '\n')
+              return len(items), len(kept), names
+
+
+          def sanitize_txt(path):
+              """频道名,url 与 分组名,#genre# 两种行；非法 url 直接丢弃"""
+              raw = open(path, encoding='utf-8', errors='replace').read().splitlines()
+              rows, names = [], set()
+              for ln in raw:
+                  s = ln.strip()
+                  if not s:
+                      continue
+                  if s.endswith(',#genre#'):
+                      rows.append(s)
+                      continue
+                  name, sep, url = s.partition(',')
+                  if not sep:
+                      continue
+                  u = clean_url(url)
+                  if u:
+                      name = name.strip()
+                      rows.append('%s,%s' % (name, u))
+                      names.add(name)
+
+              cleaned = []
+              for j, ln in enumerate(rows):
+                  if ln.endswith(',#genre#'):
+                      nxt = None
+                      for x in rows[j + 1:]:
+                          if x.endswith(',#genre#'):
+                              break
+                          nxt = x
+                          break
+                      if nxt is not None:
+                          cleaned.append(ln)
+                  else:
+                      cleaned.append(ln)
+
+              if rows and not cleaned:
+                  print('WARNING: txt cleanup would empty the file, skipped')
+                  return len(rows), len(rows), names
+              open(path, 'w', encoding='utf-8', newline='\n').write('\n'.join(cleaned) + '\n')
+              return len(rows), len([x for x in cleaned if not x.endswith(',#genre#')]), names
+
+
+          def align_epg(path, keep_names):
+              """删除占位符节目，并只保留播放列表里真实存在的频道"""
+              tree = ET.parse(path)
+              root = tree.getroot()
+
+              ph = 0
+              for prog in list(root.findall('programme')):
+                  t = prog.find('title')
+                  text = (t.text or '') if t is not None else ''
+                  if any(k in text for k in BAD_TITLE):
+                      root.remove(prog)
+                      ph += 1
+
+              ch_del, pr_del = 0, 0
+              for ch in list(root.findall('channel')):
+                  if ch.get('id') not in keep_names:
+                      root.remove(ch)
+                      ch_del += 1
+              for prog in list(root.findall('programme')):
+                  if prog.get('channel') not in keep_names:
+                      root.remove(prog)
+                      pr_del += 1
+
+              ET.indent(tree, space='\t')
+              tree.write(path, encoding='utf-8', xml_declaration=True)
+              for gz in (os.path.join(os.path.dirname(path), 'epg.gz'), path + '.gz'):
+                  if os.path.exists(gz):
+                      with open(path, 'rb') as fin, gzip.open(gz, 'wb') as fout:
+                          fout.write(fin.read())
+              print('EPG: placeholder programmes -%d | ghost channels -%d | orphan programmes -%d | left channels %d'
+                    % (ph, ch_del, pr_del, len(root.findall('channel'))))
+
+
+          names = set()
+
+          m3u_path = 'output/result.m3u'
+          if os.path.exists(m3u_path):
+              a, b, n = sanitize_m3u(m3u_path)
+              names |= n
+              print('M3U: entries %d -> %d (dropped %d invalid/empty), channels %d' % (a, b, a - b, len(n)))
+
+          txt_path = 'output/result.txt'
+          if os.path.exists(txt_path):
+              a, b, n = sanitize_txt(txt_path)
+              names |= n
+              print('TXT: rows %d -> %d, channels %d' % (a, b, len(n)))
+
+          if not names:
+              print('No usable channel found, skip EPG alignment')
               raise SystemExit(0)
 
-          bad_markers = ('未能提供', '敬请原谅')
-          tree = ET.parse(xml_path)
-          root = tree.getroot()
-          removed = []
-          for prog in list(root.findall('programme')):
-              title = prog.find('title')
-              text = (title.text or '') if title is not None else ''
-              if any(marker in text for marker in bad_markers):
-                  removed.append((prog.get('channel'), text))
-                  root.remove(prog)
-
-          if removed:
-              ET.indent(tree, space='\t')
-              tree.write(xml_path, encoding='utf-8', xml_declaration=True)
-              with open(xml_path, 'rb') as fin, gzip.open(gz_path, 'wb') as fout:
-                  fout.write(fin.read())
-
-          print('removed %d placeholder programmes' % len(removed))
-          for channel, text in removed[:20]:
-              print('  %s | %s' % (channel, text))
-          EPGEOF
+          for epg_path in ('output/epg/epg.xml', 'output/epg.xml'):
+              if os.path.exists(epg_path):
+                  align_epg(epg_path, names)
+          print('Keep %d channel names in total' % len(names))
+          SANEOF
 
       - name: Create release metadata
         id: release
