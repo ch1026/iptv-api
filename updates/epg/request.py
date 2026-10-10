@@ -260,6 +260,98 @@ def dedupe_epg_entries(whitelist_entries, default_entries, discovered_entries, d
     return result, duplicate_count, limited_count, discovered_added
 
 
+_EPG_GENERIC_TITLES = {
+    "电视剧", "剧场", "电影", "生活服务", "精彩呈现", "栏目", "专题", "节目",
+    "暂无", "敬请", "其他", "广告", "节目预告", "连续剧", "动画片", "综艺",
+    "宣传", "导视", "垫片", "片花", "电视剧场", "精彩节目", "微短剧",
+    "中国故事", "纪录片", "未提供", "节目单", "待定", "敬请期待", "敬请收看",
+}
+_EPG_GENERIC_PREFIXES = ("电视剧", "剧场", "电影", "动画片", "栏目", "专题",
+                         "重播", "栏目剧", "宣传片", "导视")
+
+
+def _epg_time_key(value):
+    """把 '20261009193100 +0800' 变成可直接比较的 UTC 时间"""
+    match = re.match(r"(\d{14})\s*([+-]\d{4})?", (value or "").strip())
+    if not match:
+        return None
+    stamp = datetime.strptime(match.group(1), "%Y%m%d%H%M%S")
+    offset = match.group(2)
+    if offset:
+        sign = 1 if offset[0] == "+" else -1
+        stamp -= sign * timedelta(hours=int(offset[1:3]), minutes=int(offset[3:5]))
+    return stamp
+
+
+def _epg_title_of(programme):
+    node = programme.find("title")
+    return (node.text or "").strip() if node is not None else ""
+
+
+def _epg_title_rank(programme):
+    """2=具体节目名  1=泛词打头  0=纯泛词或空"""
+    title = _epg_title_of(programme)
+    if not title:
+        return 0
+    if title in _EPG_GENERIC_TITLES:
+        return 0
+    if title.startswith(_EPG_GENERIC_PREFIXES):
+        return 1
+    return 2
+
+
+def _resolve_epg_overlaps(records):
+    """按来源优先级解掉频道时间线叠加，并给泛词档期补上更具体的标题。
+
+    不同来源给出的起止时间常常差一两分钟，靠 (start, stop) 精确去重拦不住，
+    几套时间线会叠在一起（播放器可能显示"电视剧/剧场"这类泛词条目）。
+    这里按 _priority（白名单 0 < 普通 1 < 自动发现 2）先到先得：高优先级来源
+    占住时段，低优先级来源只补它没覆盖到的空档。时间线定下来之后，某个档期
+    如果只有泛词标题，就从覆盖该档期的其他来源里挑一个信息量更高的标题补上
+    （只换标题，不动起止时间）。
+    """
+    entries = []
+    for (start, stop), record in records.items():
+        begin = _epg_time_key(start)
+        end = _epg_time_key(stop)
+        if begin is None or end is None or end <= begin:
+            continue
+        entries.append((record[0], begin, end, record[1]))
+    entries.sort(key=lambda item: (item[0], item[1], item[2]))
+
+    kept = []
+    for candidate in entries:
+        _, begin, end, _ = candidate
+        if any(begin < other_end and other_begin < end
+               for _, other_begin, other_end, _ in kept):
+            continue
+        kept.append(candidate)
+
+    for _, begin, end, programme in kept:
+        if _epg_title_rank(programme) >= 2:
+            continue
+        best = programme
+        best_rank = _epg_title_rank(programme)
+        best_cover = 0.0
+        span = (end - begin).total_seconds()
+        for _, other_begin, other_end, candidate in entries:
+            if candidate is programme:
+                continue
+            cover = (min(end, other_end) - max(begin, other_begin)).total_seconds()
+            if cover < span * 0.6:
+                continue
+            rank = _epg_title_rank(candidate)
+            if rank > best_rank or (rank == best_rank and cover > best_cover):
+                best, best_rank, best_cover = candidate, rank, cover
+        if best is not programme:
+            node = programme.find("title")
+            if node is not None:
+                node.text = _epg_title_of(best)
+
+    kept.sort(key=lambda item: item[1])
+    return [item[3] for item in kept]
+
+
 async def _consume_epg_response(response, normalized_names, include_unmatched):
     parser = EpgStreamParser(
         normalized_names=normalized_names,
@@ -548,13 +640,7 @@ async def get_epg(names=None, callback=None, extra_entries=None, pause_wait=None
             active_count = counts["active"]
             disabled_count = counts["disabled"]
         result = {
-            channel_name: [
-                record[1]
-                for _, record in sorted(
-                    records.items(),
-                    key=lambda item: item[0],
-                )
-            ]
+            channel_name: _resolve_epg_overlaps(records)
             for channel_name, records in programme_records.items()
         }
         reporter.info(
