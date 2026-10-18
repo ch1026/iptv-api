@@ -921,7 +921,7 @@ myuka转播,https://live.ottiptv.cc/bilibili/1851405521
 我画 我再画=w=,https://live.ottiptv.cc/bilibili/1544688
 根本就没有这种美乃滋,https://live.ottiptv.cc/bilibili/8266925
 你的摸鱼搭子,https://live.ottiptv.cc/bilibili/3037167
-【蓝翔】弹幕天团,https://1309924053-1lxi1rgwxp.ap-guangzhou.tencentscf.com/douyu.m3u
+【蓝翔】弹幕天团,https://1309924053-1lxi1rgwxp.ap-guangzhou.tencentscf.com/douyu/5908256.m3u8
 
 [KEYWORDS]
 # 以下区域是关键字白名单，某频道获取到的接口地址中含有指定关键字，则该接口会被加入该频道的白名单，多条记录换行输入。
