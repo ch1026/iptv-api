@@ -148,14 +148,29 @@ CCTV4K
 CHC影迷电影
 CHC动作电影
 CHC家庭影院
-NewTV動作電影
-NewTV家庭劇場
-NewTV愛情喜劇[19201080]
-NewTV海外劇場[19201080]
-NewTV精品大劇
-NewTV黑莓电影q
+
+🎞 NewTV剧场,#genre#
 黑莓动画
 黑莓电影
+NewTV動作電影
+NewTV家庭劇場
+NewTV愛情喜劇
+NewTV海外劇場
+NewTV精品大劇
+NewTV黑莓电影
+NewTV武搏世界
+NewTV中国功夫
+NewTV军事评论
+NewTV精品纪录
+NewTV超级体育
+NewTV超级综艺
+NewTV精品综合
+NewTV精品萌宠
+NewTV炫舞未来
+NewTV超级电影
+NewTV超级电视剧
+NewTV东北热剧
+NewTV欢乐剧场
 
 🏀体育频道,#genre#
 天元围棋
