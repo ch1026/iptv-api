@@ -14,9 +14,14 @@ https://gitee.com/taksssss/tv/raw/main/epg/erw.xml.gz
 ③ 补充：epg.pw 中国区（Gitee 镜像）—— 补少数 ①② 没有的频道
 https://gitee.com/taksssss/tv/raw/main/epg/epgpw_cn.xml.gz
 
-④ 兜底：112114 本尊 —— 公认覆盖最全。内地移动宽带有 DNS 污染打不开，
-但我们是在境外 CI 上拉，不受影响。哪天拉不动就在行首加 # 停用。
-http://epg.112114.xyz/pp.xml
+④ 兜底：112114（Gitee 镜像，CI 内最稳，覆盖 NewTV 全系 + 湖南卫视/经视/电视剧/电影/娱乐/国际）
+实测本镜像含 newtv中国功夫/军事评论/古装剧场/武搏世界… 及 湖南卫视/经视/电视剧 等，
+id 已是小写简体，与你的 M3U 经 get_primary 归一后完全一致，无需补 alias。
+http://epg.112114.xyz/pp.xml 在部分 CI/网络会被挡，故优先用下面这个镜像：
+https://gitee.com/taksssss/tv/raw/main/epg/112114.xml.gz
+# 若上面镜像失效，取消下一行注释回退到 112114 本尊（注意：本地长沙移动宽带 DNS 污染打不开，
+# 但在 GitHub Actions 的 CI 上通常能拉到；仍拉不动就在行首加 # 停用）
+# http://epg.112114.xyz/pp.xml
 
 ⑤ 可选：51zmt 镜像 —— 今明两天节目更准，需要时取消注释（同样放普通优先级）
 https://gitee.com/taksssss/tv/raw/main/epg/51zmte1.xml.gz

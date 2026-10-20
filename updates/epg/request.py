@@ -4,7 +4,7 @@ import re
 import zlib
 import xml.etree.ElementTree as ET
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from time import time
 from urllib.parse import urlsplit, urlunsplit
 
@@ -37,6 +37,33 @@ EPG_DAYS_AHEAD = 14
 
 class EpgResourceLimitError(ValueError):
     pass
+
+
+# 所有节目时间强制归一到北京时间 +0800。
+# 中文 IPTV EPG 源的墙钟本就是北京时间；但部分补充源（如 112114）会把时间错标成 +0000，
+# 或干脆漏标时区。前者被播放器按 UTC 解读后整体偏移 8 小时（"时间错开"），
+# 后者会被解析器直接丢弃导致节目单空白。这里忽略源自带时区标签，
+# 把墙钟直接当作北京时间，对本来就 +0800 的源是零影响。
+BEIJING_TZ = timezone(timedelta(hours=8))
+
+
+def _normalize_epg_time(raw):
+    """把 XMLTV 时间字符串归一到北京时间 +0800，返回带 tz 的 datetime；无法解析返回 None。"""
+    if not raw:
+        return None
+    s = re.sub(r"\s+", "", raw)
+    # 1) 带时区：解析后丢弃源时区，墙钟当作北京时间（不做 astimezone 偏移）。
+    try:
+        dt = datetime.strptime(s, "%Y%m%d%H%M%S%z")
+        return dt.replace(tzinfo=BEIJING_TZ)
+    except ValueError:
+        pass
+    # 2) 漏标时区：直接按北京时间解析。
+    try:
+        dt = datetime.strptime(s, "%Y%m%d%H%M%S")
+        return dt.replace(tzinfo=BEIJING_TZ)
+    except ValueError:
+        return None
 
 
 def _local_name(tag):
@@ -116,16 +143,9 @@ class EpgStreamParser:
         channel_id = element.get("channel")
         if channel_id not in self.included_channel_ids:
             return
-        try:
-            channel_start = datetime.strptime(
-                re.sub(r"\s+", "", element.get("start") or ""),
-                "%Y%m%d%H%M%S%z",
-            )
-            channel_stop = datetime.strptime(
-                re.sub(r"\s+", "", element.get("stop") or ""),
-                "%Y%m%d%H%M%S%z",
-            )
-        except (TypeError, ValueError):
+        channel_start = _normalize_epg_time(element.get("start") or "")
+        channel_stop = _normalize_epg_time(element.get("stop") or "")
+        if channel_start is None or channel_stop is None:
             return
 
         timezone = channel_start.tzinfo

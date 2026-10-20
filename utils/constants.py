@@ -94,7 +94,9 @@ multiline_m3u_pattern = re.compile(
 key_value_pattern = re.compile(r'(?P<key>[\w-]+)=(?P<value>"[^"]*"|\'[^\']*\'|\S+)')
 
 sub_pattern = re.compile(
-    r"-|_|\((.*?)\)|（(.*?)）|\[(.*?)]|「(.*?)」| |｜|频道|普清|标清|高清|HD|hd|超清|超高|超高清|4K|4k|中央|央视|电视台|台|电信|联通|移动")
+    r"-|_|\((.*?)\)|（(.*?)）|\[(.*?)]|「(.*?)」| |｜|频道|普清|标清|高清|HD|hd|超清|超高|超高清|4K|4k|中央|央视|电视台|台|电信|联通|移动"
+    r"|50 FPS|50FPS|60 FPS|60FPS|HEVC|H265|H\.265|H264|H\.264|AVC|HDR|1080P|1080p|720P|720p"
+    r"|FPS|帧")
 
 replace_dict = {
     "plus": "+",
