@@ -1,29 +1,33 @@
-① 主源：CharmingEPG —— 单源覆盖最高，节目名最规范，时间线最准
-改动 request.py 后，它独占时间线，下面 ③④ 只负责补它没有的时段
+# ============================================================
+#  EPG 源配置（已按 长沙移动 + GitHub Actions CI 实测调优）
+#  覆盖优先级：文件顺序 = 优先级（先到先得），同 (start,stop) 高优先级占住时段。
+#  本配置所有源均为“普通优先级”，靠顺序保证：主源在前、兜底在后。
+# ============================================================
+
+# ① 主源：CharmingEPG（epg.cdn.loc.cc）
+#    数据最规范、含全 CCTV + 全卫视 + NewTV，时间线最准。
+#    ⚠ 这是国内单机，GitHub Actions（美国节点）经常超时/被截断，
+#      卫视排在 XML 后部、一旦被截断会整段丢失 → 这正是“卫视只剩湖南能看”的根因。
+#      所以它排第一优先用；一旦在 CI 拉不全，下面 ④ 立刻顶上补全卫视。
 https://epg.cdn.loc.cc/xml
 
-② 主源热备：erw 数据（Gitee 国内站，与 ① 同数据、换主机，防单点故障）
-注意：与 ① 内容相同时程序会自动跳过，不会造成时间线叠加
+# ② 主源热备：erw（Gitee，与 ① 同数据、换主机防单机故障）
+#    内容相同时程序自动跳过，不会造成时间线叠加。
 https://gitee.com/taksssss/tv/raw/main/epg/erw.xml.gz
 
---- 以下两个是"补充源"，故意放在 [WHITELIST] 之外 ---
-它们的数据时间线偏移较大（实测能差 4~5 分钟，还会把整晚排成一条长节目），
-放在普通优先级里，只在 ①② 完全没有该频道/该时段时才顶上。
-[SUPPLEMENT]
-
-③ 补充：epg.pw 中国区（Gitee 镜像）—— 补少数 ①② 没有的频道
+# ③ CCTV 补充：epg.pw 中国区（Gitee）—— 补 ①② 偶尔缺的少数频道
 https://gitee.com/taksssss/tv/raw/main/epg/epgpw_cn.xml.gz
 
-④ 兜底：112114（Gitee 镜像，CI 内最稳，覆盖 NewTV 全系 + 湖南卫视/经视/电视剧/电影/娱乐/国际）
-实测本镜像含 newtv中国功夫/军事评论/古装剧场/武搏世界… 及 湖南卫视/经视/电视剧 等，
-id 已是小写简体，与你的 M3U 经 get_primary 归一后完全一致，无需补 alias。
-http://epg.112114.xyz/pp.xml 在部分 CI/网络会被挡，故优先用下面这个镜像：
+# ④ 卫视 / 全量兜底（★ 本次修复关键项 ★）
+#    112114 含【全部 45 个卫视 + 全 CCTV + NewTV 全系】详细节目单。
+#    两个镜像互为冗余：raw.githubusercontent.com 在 GitHub Actions 同网络最稳（首选），
+#    gitee 作备用。当 ① 在 CI 被截断/超时（卫视丢失）时，本源把卫视节目单补全，
+#    彻底解决“卫视只湖南能看 / 显示精彩节目电视剧占位”的问题。
+#    ⏱ 时间已由 updates/epg/request.py 强制归一为北京时间 +0800，本源时区偏差也被一并修正。
+https://raw.githubusercontent.com/taksssss/tv/main/epg/112114.xml.gz
 https://gitee.com/taksssss/tv/raw/main/epg/112114.xml.gz
-# 若上面镜像失效，取消下一行注释回退到 112114 本尊（注意：本地长沙移动宽带 DNS 污染打不开，
-# 但在 GitHub Actions 的 CI 上通常能拉到；仍拉不动就在行首加 # 停用）
-# http://epg.112114.xyz/pp.xml
 
-⑤ 可选：51zmt 镜像 —— 今明两天节目更准，需要时取消注释（同样放普通优先级）
-https://gitee.com/taksssss/tv/raw/main/epg/51zmte1.xml.gz
-⑥ 可选：港澳台专用（明珠台 / TVB Plus / 无线新闻台 / ViuTV）—— ① 已含大部分
-https://gitee.com/taksssss/tv/raw/main/epg/epgpw_hk.xml.gz
+# ⑤ 可选：51zmt（今明两天节目更准）—— 需要时取消注释
+# https://gitee.com/taksssss/tv/raw/main/epg/51zmte1.xml.gz
+# ⑥ 可选：港澳台专用（明珠台 / TVB Plus / 无线新闻台 / ViuTV）
+# https://gitee.com/taksssss/tv/raw/main/epg/epgpw_hk.xml.gz
