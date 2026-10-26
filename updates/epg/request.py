@@ -598,7 +598,14 @@ async def get_epg(names=None, callback=None, extra_entries=None, pause_wait=None
                 for programme in programmes.get(channel_id, ()):
                     programme_key = (programme.get("start"), programme.get("stop"))
                     existing = programme_records[normalized_name].get(programme_key)
-                    if existing is None or priority < existing[0]:
+                    if existing is None:
+                        programme_records[normalized_name][programme_key] = (priority, programme)
+                    elif priority < existing[0]:
+                        programme_records[normalized_name][programme_key] = (priority, programme)
+                    elif priority == existing[0] and _epg_title_rank(programme) > _epg_title_rank(existing[1]):
+                        # 同档期同优先级：优先保留更具体的标题
+                        # （典型场景：charm 在该时段给的是"生活服务"垫播，而 pw/112114 有真实剧名，
+                        #  原"先到先得"会留下垫播，这里换成具体剧名，直接改善"不精准"）
                         programme_records[normalized_name][programme_key] = (priority, programme)
             reporter.info(
                 "epg.source_parsed",
